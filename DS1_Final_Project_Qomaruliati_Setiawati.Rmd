@@ -1,0 +1,346 @@
+---
+title: "Analyzing Trends in New York City's Citi Bike"
+author: "Qomaruliati Setiawati"
+date: "11/22/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(dplyr)
+library(tidyverse)
+library(lubridate)
+library(maps)
+library(tmaptools)
+library(ggmap)
+library(rvest)
+base_dir = "/users/Ruli/Desktop/DataScienceI/"
+```
+
+
+## Introduction
+
+Citi Bike is a bicycle sharing system established in 2013 in New York City. As of now, the nation’s largest bike-sharing system has 12,000 stations across Manhattan, Brooklyn, Queens, and Jersey City.  Riding a bike is fun and healthy exercise. Additionally, in urban areas like NYC, bike-sharing can also serve as a time-effective way of moving around tightly packed areas. By using a smartphone, users can download the free Citi Bike app and locate the nearest stations as well as the number of bikes available at each station. A single ride costs $3/ trip, up to 30-minute rides. Daypass costs $12/day, unlimited 30-minute rides in a 24-hour period. The annual membership costs $169/year, unlimited 45-minute rides. 
+
+For the purpose of this project, I will be analyzing the use of Citi Bike in 2018 from multiple aspects, including but not limited to:
+
+- What are the total trips monthly throughout the year of 2018?
+- What are the total trips for each hour of the day for every month in 2018? Are there differences in the winter months vs any other months?
+- What do the total trips look like on the weekday vs weekend? How do weekday vs weekend trips look in Fall, Spring, Summer, and Winter?
+- What is the proportion of bike usage for each day of the week based on the user type (customer vs subscriber)? How does it look like based on gender?
+
+
+## Methods
+
+I am getting my data from Citi Bike’s system data (https://www.citibikenyc.com/system-data). Data for each trip is made available on the Citi Bike’s website. Each file records monthly data. Each data file is huge, but for this project, I will only be analyzing the data for 2018. Each trip record includes:
+
+* Trip duration
+* Start time
+* Stop time
+* Start station ID
+* Start station name
+* Start station latitude
+* Start station longitude
+* End Station ID
+* End Station Name
+* End Station Latitude
+* End Station Longitude
+* Bike ID
+* User type
+* Birth year
+* Gender
+
+In order to answer my questions, I will be using loops that read in the data and summarize by multiple things such as season, day of the week, weekday vs. weekend, and so on. This way, I don’t have to read in all the files and take up memory of my laptop. As I read in the data, and summarize it, I will be explaining each graph and how it will relate to my questions. 
+
+
+```{r}
+# Set up base url and destination directory.
+url = 'https://s3.amazonaws.com/tripdata/'
+dest = base_dir
+
+# Read the web page containing the file listing.
+html = read_html(url)
+
+# Extract the file names.
+files = html %>%
+         html_node('body') %>%
+         html_node('listbucketresult') %>%
+         html_nodes('contents') %>%
+         html_nodes('key') %>%
+         html_text()
+files = files[-grep('html$', files)]
+
+
+# Create a loop that runs this statement.
+for (i in 1:length (files)) {
+    if (str_detect(files[i], '^2018')) {
+    print (str_c(url, files[i]))
+    #download.file (url = str_c(url, files[i]),
+              #destfile = str_c(dest, 'data/', files[i]))
+  #Sys.sleep(5)
+  }
+} 
+
+```
+
+
+
+```{r}
+bike_files1 = list.files(str_c(base_dir, 'data/'), pattern = '^2018')
+bike_files1
+```
+
+First of all, to see the general picture of the bike usage, I want to see the total trips for each hour of the day in 2018. 
+
+```{r}
+# Read in the data. 
+bikes1 = NULL
+
+for(f in bike_files1) {
+  print(f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (hour = hour(starttime),
+                 day = day (starttime),
+                 month = month (starttime),
+                 year = year (starttime)) %>%
+         count(month, hour, day)
+  
+  bikes1 = bind_rows(bikes1, temp)
+}
+```
+
+
+```{r}
+bikes1 %>%
+        group_by(hour) %>%
+        summarize (sum_trips = sum (n)) %>%
+          ggplot (aes(hour, sum_trips)) +
+          geom_line () +
+          labs(title = "Total Trips 2018",
+               y = "number of trips")
+```
+
+Based on the graph above, in 2018, during peak hours of 8 to 9 am, there are nearly 1,5 million trips and nearly 1,75 million trips between 4pm and 5 pm. This shows how a significant amount of people use bikes to commute. 
+
+
+I thought it would be interesting to see how the total trips per hour differ monthly throughout the year. 
+
+```{r}
+bikes56 = bikes1 %>%
+         mutate (month = as.character (month),
+         month = if_else(month == "3", "March", month),
+         month = if_else(month == "4", "April", month),
+         month = if_else(month == "5", "May", month),
+         month = if_else(month == "6", "June", month),
+         month = if_else(month == "7", 'July', month),
+         month = if_else(month == "8", 'August', month),
+         month = if_else(month == "9", 'September', month),
+         month = if_else(month == "10", "October", month),
+         month = if_else(month == "11", "November", month),
+         month = if_else(month == "12", "December", month),
+         month = if_else(month == "1", "January", month),
+         month = if_else(month == "2", "February", month)) %>%
+         group_by(hour, month) %>%
+         summarize (sum_trips = sum(n)) 
+
+bikes56$month = factor(bikes56$month, levels = c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"))
+
+bikes56 %>%
+            ggplot (aes(hour, sum_trips)) +
+            geom_line() +
+            facet_wrap(~month, ncol = 3) +
+            labs(title = 'Total Trips per Hour',
+                 y = "number of trips")
+```
+
+Based on the graph above, there are significantly fewer hourly total trips in the winter months (December - February) compared to, for example, summer months. However, there are still 50 to 100 thousand trips around rush hour in December and January.
+
+
+I am also curious as to how the trends of the total trip look on the weekday vs weekend in 2018 which should be an interesting exploration.
+
+
+```{r}
+# Read in the data. 
+bikes2 = NULL
+
+for(f in bike_files1) {
+  print(f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (hour = hour(starttime), weekday = wday(starttime, week_start = getOption("lubridate.week.start", 7))) %>%
+         mutate (weekday = if_else(weekday == 1 | weekday == 7, "weekend", "weekday")) %>%
+         count (hour, weekday) %>%
+         group_by(hour, weekday) %>%
+         summarise (sum_trips = sum (n, na.rm = TRUE))
+         
+  bikes2 = bind_rows(bikes2, temp)
+}
+```
+
+```{r, fig.width=10,fig.height=10}
+bikes2 %>%
+      ggplot (aes(hour, sum_trips)) +
+        geom_point () +
+        facet_wrap(~weekday, nrow = 2) +
+        labs (title = "Total Trips 2018",
+              y = "number of trips")
+```
+
+As you can see, there is a significant difference in the total hourly trips on weekdays and weekends. On weekdays, there are more trips around the peak commuting hours at 8 am and 5 pm. On the weekend, the trips are spread out throughout the day. Another interesting thing is there are more users on weekdays compared to the weekend. I initially thought that there would be more on the weekend. It shows that bikes are being used for communting more than leisure.
+
+
+How does the weekend vs. weekday pattern looks like in each season?
+
+```{r}
+bikes3 = NULL
+
+for(f in bike_files1) {
+  print(f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (month = month (starttime), day = day(starttime), hour = hour(starttime),
+                 weekday = wday(starttime, week_start = getOption("lubridate.week.start", 7))) %>%
+         mutate (weekday = if_else(weekday == 1 | weekday == 7, "weekend", "weekday")) %>%
+         mutate(season = ifelse(month %in% c(12, 1, 2), "Winter",
+                         ifelse(month %in% c(3, 4, 5), "Spring",
+                         ifelse(month %in% c(6, 7, 8), "Summer",
+                         ifelse(month %in% c(9, 10, 11), "Fall"))))) %>%
+         count (hour, season, weekday)
+    
+  bikes3 = bind_rows(bikes3, temp)
+}
+```
+
+```{r, fig.width=10,fig.height=10}
+ggplot (bikes3, aes(hour, n)) +
+        geom_point () +
+        facet_grid(weekday ~ season) +
+        labs (title = "Total Trips 2018",
+              y = "number of trips")
+```
+
+It is really interesting to see the similarities and differences in the graph. Both weekdays and weekends have similar patterns across the season. As I expected, both weekdays and weekends have lower total trips in the winter compared to other months. 
+
+
+I also thought it would be interesting to see the proportion of the bike usage for each day of the week based on the user type (customer vs subscriber).
+
+```{r}
+bikes4 = NULL
+
+for(f in bike_files1) {
+  print(f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (month = month (starttime), day = day(starttime), hour = hour(starttime),
+                 weekday = wday(starttime, week_start = getOption("lubridate.week.start", 7))) %>%
+         mutate (weekday = as.character(weekday),
+         weekday = if_else(weekday == "1","Sunday",weekday),
+         weekday = if_else(weekday == "2","Monday", weekday),
+         weekday = if_else(weekday == "3","Tuesday", weekday),
+         weekday = if_else(weekday == "4","Wednesday", weekday),
+         weekday = if_else(weekday == "5",'Thursday', weekday),
+         weekday = if_else(weekday == "6",'Friday', weekday),
+         weekday = if_else(weekday == "7",'Saturday', weekday)) %>%
+         count (usertype, weekday)
+  
+  bikes4 = bind_rows(bikes4, temp)          
+           
+}
+```
+
+```{r}
+
+bikes4$weekday = factor(bikes4$weekday, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday","Saturday", "Sunday"))
+
+bikes4 %>%
+         ggplot (aes(x= weekday, y = n / sum (n), fill=usertype)) +
+         geom_bar (stat = "identity") +
+         labs (title = "Proportion of Bike Usage Based on User Type", y = "density")
+```
+It turns out, there are significantly more subscribers than customers on each day of the week. 
+
+
+Since each trip also records gender, I am curious to see the proportion of bike usage for each day of the week based on gender. 
+
+```{r}
+bikes5 = NULL
+
+for(f in bike_files1) {
+  print(f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (gender = as.character(gender),
+                 gender = if_else(gender == "0", "unknown", gender),
+                 gender = if_else(gender == "1", "male", gender),
+                 gender = if_else(gender == "2", "female", gender)) %>%
+         mutate (month = month (starttime), day = day(starttime), hour = hour(starttime),
+                 weekday = wday(starttime, week_start = getOption("lubridate.week.start", 7))) %>%
+                 mutate (weekday = as.character(weekday),
+                 weekday = if_else(weekday == "1", "Sunday", weekday),
+                 weekday = if_else(weekday == "2", "Monday", weekday),
+                 weekday = if_else(weekday == "3", "Tuesday", weekday),
+                 weekday = if_else(weekday == "4", "Wednesday", weekday),
+                 weekday = if_else(weekday == "5", 'Thursday', weekday),
+                 weekday = if_else(weekday == "6", 'Friday', weekday),
+                 weekday = if_else(weekday == "7", 'Saturday', weekday)) %>%
+         count (gender, weekday)
+
+bikes5 = bind_rows(bikes5, temp)
+
+}
+```
+
+```{r}
+bikes5$weekday = factor(bikes5$weekday, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+bikes5 %>%
+    ggplot (aes(weekday, y = n / sum (n), fill = gender)) +
+    geom_bar (stat = "identity") +
+    labs (title = "Proportion of Bike Usage Based on Gender",
+              y = "density")
+```
+
+Based on the graph above, there are significantly more males than females for each day of the week. Note that these data are self-reported. 
+
+
+Lastly, I don't think this project can be completed without seeing a map of the bike stations and how it differs for each season. 
+
+```{r}
+bikes6 = NULL
+
+for(f in bike_files1) {
+  print (f)
+  temp = read_csv (str_c(base_dir, 'data/', f), col_types = 'dTTdcdddcdddccd', na = 'NULL') %>%
+         mutate (month = month (starttime)) %>%
+         mutate(season = ifelse(month %in% c(12, 1, 2), "Winter",
+                         ifelse(month %in% c(3, 4, 5), "Spring",
+                         ifelse(month %in% c(6, 7, 8), "Summer",
+                         ifelse(month %in% c(9, 10, 11), "Fall"))))) %>%
+         rename(start_station_id = `start station id`, 
+              start_lat = `start station latitude`, 
+              start_lon = `start station longitude`) %>%
+         count (start_station_id, start_lat, start_lon, season)
+       
+  bikes6 = bind_rows(bikes6, temp)
+}
+```
+
+```{r}
+nyc = geocode_OSM ('Manhattan, NY')
+
+nyc$bbox = c(-74.05, 40.65, -73.90, 40.83)
+
+nyc_map = get_stamenmap(as.numeric(nyc$bbox), zoom = 12)
+```
+
+
+```{r, fig.width=10,fig.height=10}
+ggmap(nyc_map) +
+                geom_point(data = bikes6, aes(start_lon, start_lat, color = n)) +
+                scale_color_viridis_c () +
+                facet_wrap (~ season, nrow = 2)
+```
+
+Based on the graph above, there are significantly more trips in lower manhattan and midtown in the summer and spring compared to winter and fall. 
+
+## Conclusion
+
+There is a big difference in bike usage on weekdays vs weekends and summer vs winter. People use the bike more on the weekdays to commute and therefore there are more trips during peak hours. On the weekends, the number of trips spread out throughout the day. In terms of user type, there are more subscribers compared to customers for each day of the week. In terms of gender, there were more males who used the bike compared to females.  The data is huge and there are so many future possible analyses for those interested to dive deeper into the data.
+
