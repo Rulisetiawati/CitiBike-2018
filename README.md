@@ -9,7 +9,7 @@ For the purpose of this project, I have analyzed the use of Citi Bike in 2018 fr
 - What do the total trips look like on the weekday vs weekend? How do weekday vs weekend trips look in Fall, Spring, Summer, and Winter?
 - What is the proportion of bike usage for each day of the week based on the user type (customer vs subscriber)? How does it look like based on gender?
 
-I am getting my data from Citi Bike’s system data (https://www.citibikenyc.com/system-data). Data for each trip is made available on the Citi Bike’s website. Each file records monthly data. Each data file is huge, but for this project, I will only be analyzing the data for 2018. Each trip record includes:
+I am getting my data from [Citi Bike’s system data](https://www.citibikenyc.com/system-data). Data for each trip is made available on the Citi Bike’s website. Each file records monthly data. Each data file is huge, but for this project, I will only be analyzing the data for 2018. Each trip record includes:
 
 * Trip duration
 * Start time
